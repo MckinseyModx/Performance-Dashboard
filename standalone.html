@@ -4,24 +4,70 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Performance Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/prop-types@15/prop-types.min.js" crossorigin></script>
     <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js" crossorigin></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js" crossorigin></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Inter"', "ui-sans-serif", "system-ui", "-apple-system", "Helvetica Neue", "Arial", "sans-serif"],
+              serif: ['"Source Serif 4"', "Georgia", "Cambria", "serif"],
+            },
+            colors: {
+              mck: {
+                navy: "#051C2C",
+                blue: "#2251FF",
+                teal: "#00A9CE",
+                gold: "#F2A900",
+                red: "#E34850",
+                green: "#00875A",
+                gray: {
+                  50: "#F4F3F1",
+                  100: "#E8EDF2",
+                  200: "#D1D9E0",
+                  400: "#B3B8C4",
+                  600: "#6B7280",
+                  800: "#333333",
+                },
+              },
+            },
+          },
+        },
+      };
+    </script>
     <style type="text/tailwindcss">
 @layer base {
   body {
     font-family:
-      "Helvetica Neue",
-      Helvetica,
-      Arial,
+      "Inter",
       ui-sans-serif,
       system-ui,
+      -apple-system,
+      "Helvetica Neue",
+      Arial,
       sans-serif;
-    background-color: #f5f6f8;
+    background-color: #f4f3f1;
     color: #051c2c;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family:
+      "Source Serif 4",
+      Georgia,
+      Cambria,
+      serif;
   }
 }
     </style>
@@ -785,16 +831,16 @@
           /* @__PURE__ */ jsx(XAxis, { type: "number", tick: { fontSize: 11 }, allowDecimals: false }),
           /* @__PURE__ */ jsx(YAxis, { type: "category", dataKey: "name", tick: { fontSize: 11 }, width: 110 }),
           /* @__PURE__ */ jsx(Tooltip, {}),
-          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#00A9CE" }),
-          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#E34850" })
+          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#051C2C" }),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#F2A9A9" })
         ] }) }) }),
         /* @__PURE__ */ jsx(ChartCard2, { title: "Work Orders by Supervisor (Foreman)", children: /* @__PURE__ */ jsx(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxs(BarChart, { data: supervisorChartData, layout: "vertical", margin: { top: 5, right: 16, left: 8, bottom: 0 }, children: [
           /* @__PURE__ */ jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "#E8EDF2" }),
           /* @__PURE__ */ jsx(XAxis, { type: "number", tick: { fontSize: 11 }, allowDecimals: false }),
           /* @__PURE__ */ jsx(YAxis, { type: "category", dataKey: "name", tick: { fontSize: 11 }, width: 90 }),
           /* @__PURE__ */ jsx(Tooltip, {}),
-          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#00A9CE" }),
-          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#E34850" })
+          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#051C2C" }),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#F2A9A9" })
         ] }) }) })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "overflow-hidden rounded-lg border border-mck-gray-200 bg-white shadow-sm", children: [
