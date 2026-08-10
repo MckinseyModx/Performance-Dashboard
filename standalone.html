@@ -1598,11 +1598,130 @@ ${example.join(",")}
     return (1 - earnedWeight) * group.compositeScore + earnedWeight * earnedNorm;
   }
 
+  // src/utils/workable.ts
+  var TRADE_DISPLAY_ORDER = ["Structural", "Pipe", "Electrical", "Paint & Sound Dampening", "Sheetmetal", "OSM"];
+  function formatWorkableWeekLabel(iso) {
+    const d = /* @__PURE__ */ new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(void 0, { month: "short", day: "numeric" });
+  }
+  function remainingHours(r) {
+    return Math.max(0, r.budgetedHours - r.earnedHours);
+  }
+  function sortTrades(trades) {
+    const known = TRADE_DISPLAY_ORDER.filter((t) => trades.includes(t));
+    const unknown = trades.filter((t) => !TRADE_DISPLAY_ORDER.includes(t)).sort();
+    return [...known, ...unknown];
+  }
+  function workableCellFor(weekRecords) {
+    const workable = weekRecords.reduce((sum, r) => sum + remainingHours(r), 0);
+    const delinquent = weekRecords.filter(isDelayed).reduce((sum, r) => sum + remainingHours(r), 0);
+    const earnedThisWeek = weekRecords.reduce((sum, r) => sum + r.earnedHours, 0);
+    const runwayWeeks = earnedThisWeek > 0 ? workable / earnedThisWeek : null;
+    return {
+      workable: Math.round(workable),
+      delinquent: Math.round(delinquent),
+      runwayWeeks
+    };
+  }
+  function computeWorkableTable(records, trades, weekCount = 6) {
+    const allWeeksSorted = Array.from(new Set(records.map((r) => r.week))).sort();
+    const weeksIso = allWeeksSorted.slice(-weekCount);
+    const orderedTrades = sortTrades(trades);
+    const rows = orderedTrades.map((trade) => ({
+      trade,
+      weeks: weeksIso.map((week) => workableCellFor(records.filter((r) => r.week === week && r.trade === trade)))
+    }));
+    const total = {
+      trade: "Total",
+      weeks: weeksIso.map((week) => workableCellFor(records.filter((r) => r.week === week)))
+    };
+    return {
+      weeksIso,
+      weekLabels: weeksIso.map(formatWorkableWeekLabel),
+      rows,
+      total
+    };
+  }
+
+  // src/components/WorkableHoursTable.tsx
+  var METRIC_ROWS = [
+    { key: "workable", label: "Workable Hrs", accent: "border-l-mck-blue" },
+    { key: "runwayWeeks", label: "Runway (wks)", accent: "border-l-mck-teal" },
+    { key: "delinquent", label: "Delinquent Hrs", accent: "border-l-mck-red" }
+  ];
+  function formatWorkableCell(key, cell) {
+    if (key === "runwayWeeks") {
+      return cell.runwayWeeks === null ? "—" : `${cell.runwayWeeks.toFixed(1)}w`;
+    }
+    return (key === "workable" ? cell.workable : cell.delinquent).toLocaleString();
+  }
+  function WorkableHoursTable({ data }) {
+    if (data.weeksIso.length === 0) {
+      return /* @__PURE__ */ jsx("div", { className: "rounded-lg border border-dashed border-mck-gray-200 bg-white p-6 text-center text-sm text-mck-gray-400", children: "No records to break down yet." });
+    }
+    const allRows = [...data.rows, data.total];
+    return /* @__PURE__ */ jsxs("div", { className: "overflow-hidden rounded-lg border border-mck-gray-200 bg-white shadow-sm", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between border-b border-mck-gray-200 bg-mck-gray-50 px-4 py-3", children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("h3", { className: "text-sm font-semibold text-mck-navy", children: "Workable Hours, Runway & Delinquent Hours" }),
+          /* @__PURE__ */ jsxs("p", { className: "mt-0.5 text-xs text-mck-gray-600", children: [
+            "By trade, trailing ",
+            data.weeksIso.length,
+            " weeks"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx("span", { className: "text-xs text-mck-gray-400", children: "Hrs unless noted" })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxs("table", { className: "w-full border-collapse text-sm", children: [
+        /* @__PURE__ */ jsx("thead", { className: "bg-mck-gray-50 text-xs uppercase tracking-wide text-mck-gray-600", children: /* @__PURE__ */ jsxs("tr", { children: [
+          /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", colSpan: 2, children: "Trade" }),
+          data.weekLabels.map((label, i) => /* @__PURE__ */ jsx("th", { className: "whitespace-nowrap px-3 py-2 text-right", children: label }, data.weeksIso[i]))
+        ] }) }),
+        /* @__PURE__ */ jsx("tbody", { children: allRows.map((row, rowIdx) => {
+          const isTotal = row.trade === "Total";
+          const groupShaded = !isTotal && rowIdx % 2 === 1;
+          return METRIC_ROWS.map((metric, metricIdx) => /* @__PURE__ */ jsxs(
+            "tr",
+            {
+              className: [
+                metricIdx === 0 ? "border-t" : "",
+                isTotal ? "border-mck-navy/30 bg-mck-navy/[0.04]" : "border-mck-gray-100",
+                groupShaded ? "bg-mck-gray-50/70" : ""
+              ].join(" "),
+              children: [
+                metricIdx === 0 ? /* @__PURE__ */ jsx(
+                  "td",
+                  {
+                    rowSpan: METRIC_ROWS.length,
+                    className: `border-r border-mck-gray-100 px-3 py-2 align-top text-sm ${isTotal ? "font-semibold text-mck-navy" : "font-medium text-mck-gray-800"}`,
+                    children: row.trade
+                  }
+                ) : null,
+                /* @__PURE__ */ jsx("td", { className: `border-l-2 py-1.5 pl-2.5 pr-3 text-xs text-mck-gray-600 ${metric.accent}`, children: metric.label }),
+                row.weeks.map((cell, i) => /* @__PURE__ */ jsx(
+                  "td",
+                  {
+                    className: `px-3 py-1.5 text-right tabular-nums ${metric.key === "delinquent" && cell.delinquent > 0 ? "font-semibold text-mck-red" : isTotal ? "font-semibold text-mck-navy" : "text-mck-gray-700"}`,
+                    children: formatWorkableCell(metric.key, cell)
+                  },
+                  data.weeksIso[i]
+                ))
+              ]
+            },
+            `${row.trade}-${metric.key}`
+          ));
+        }) })
+      ] }) })
+    ] });
+  }
+
   // src/App.tsx
   var WEIGHTS_STORAGE_KEY = "module4-dashboard:weights";
   var TRADES_STORAGE_KEY = "module4-dashboard:trades";
   var RANK_EARNED_HOURS_WEIGHT_KEY = "module4-dashboard:rank-earned-hours-weight";
   var WEEK_COUNT = 12;
+  var Q3_TARGET_HOURS_LABEL = "42k";
   function loadFromStorage(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -1670,6 +1789,22 @@ ${example.join(",")}
         return true;
       });
     }, [records, filters]);
+    const recordsForWorkableTable = useMemo(() => {
+      return records.filter((r) => {
+        if (filters.hulls.length > 0 && !filters.hulls.includes(r.hull)) return false;
+        if (filters.modules.length > 0 && !filters.modules.includes(r.module)) return false;
+        if (filters.supervisors.length > 0 && !filters.supervisors.includes(r.supervisor)) return false;
+        if (filters.shifts.length > 0 && !filters.shifts.includes(r.shift)) return false;
+        if (filters.workPackages.length > 0 && !filters.workPackages.includes(r.workPackage)) return false;
+        if (filters.weekStart && r.week < filters.weekStart) return false;
+        if (filters.weekEnd && r.week > filters.weekEnd) return false;
+        return true;
+      });
+    }, [records, filters]);
+    const workableTable = useMemo(
+      () => computeWorkableTable(recordsForWorkableTable, trades, 6),
+      [recordsForWorkableTable, trades]
+    );
     const weeksInView = useMemo(() => uniqueSorted(filteredRecords.map((r) => r.week)), [filteredRecords]);
     const latestWeek = weeksInView.length > 0 ? weeksInView[weeksInView.length - 1] : null;
     const summary = useMemo(() => {
@@ -1755,6 +1890,12 @@ ${example.join(",")}
           tab
         )) }),
         activeTab === "scorecard" ? /* @__PURE__ */ jsxs(Fragment2, { children: [
+          /* @__PURE__ */ jsx("div", { className: "flex flex-wrap items-start gap-4", children: /* @__PURE__ */ jsxs("div", { className: "inline-flex flex-col rounded-lg border border-mck-gray-200 bg-mck-navy px-5 py-3 text-white shadow-sm ring-1 ring-mck-blue/20", children: [
+            /* @__PURE__ */ jsx("span", { className: "text-xs font-medium uppercase tracking-wide text-mck-teal", children: "Q3 Target" }),
+            /* @__PURE__ */ jsx("span", { className: "mt-1 text-3xl font-semibold", children: Q3_TARGET_HOURS_LABEL }),
+            /* @__PURE__ */ jsx("span", { className: "mt-1 text-xs text-mck-gray-400", children: "Earned hours goal" })
+          ] }) }),
+          /* @__PURE__ */ jsx(WorkableHoursTable, { data: workableTable }),
           /* @__PURE__ */ jsx(
             ScorecardSummary,
             {
