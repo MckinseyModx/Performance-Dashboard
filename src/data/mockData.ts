@@ -21,7 +21,7 @@ export const DEFAULT_TRADES = [
   "OSM",
 ];
 
-const BOATS = ["1", "2", "3", "4"];
+const BOATS = [" Boat 1", " Boat 2", " Boat 3", " Boat 4"];
 const MODULES = ["1", "2", "3", "4", "5", "6"];
 
 const SUPERVISORS_BY_TRADE: Record<string, string[]> = {
