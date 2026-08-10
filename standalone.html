@@ -637,6 +637,243 @@
     ] });
   }
 
+  // src/utils/insights.ts
+  function parseIso(value) {
+    if (!value) return null;
+    const d = /* @__PURE__ */ new Date(`${value}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  function daysBetween(fromIso, toIso) {
+    const from = parseIso(fromIso);
+    const to = parseIso(toIso);
+    if (!from || !to) return null;
+    return Math.round((to.getTime() - from.getTime()) / 864e5);
+  }
+  function isDelayed(record) {
+    const notDone = record.actionStatus ? record.actionStatus.trim().toLowerCase() !== "closed" : record.mfgStatus ? record.mfgStatus.trim().toLowerCase() !== "complete" : record.actualPercentComplete < 100;
+    if (!notDone) return false;
+    const dueIso = record.actionDue || record.mfgDueDate;
+    const overdue = daysBetween(dueIso, record.week);
+    return overdue !== null && overdue > 0;
+  }
+  function daysOverdue(record) {
+    if (!isDelayed(record)) return 0;
+    const dueIso = record.actionDue || record.mfgDueDate;
+    return Math.max(0, daysBetween(dueIso, record.week) ?? 0);
+  }
+  function planToCutDays(record) {
+    return daysBetween(record.mfgPlan, record.mfgCut);
+  }
+  function cutToActionCutDays(record) {
+    return daysBetween(record.mfgCut, record.actionCut);
+  }
+  function breakdownBy(records, selector) {
+    const buckets = /* @__PURE__ */ new Map();
+    for (const r of records) {
+      const key = selector(r) || "(unspecified)";
+      const bucket = buckets.get(key) ?? { total: 0, delayed: 0 };
+      bucket.total += 1;
+      if (isDelayed(r)) bucket.delayed += 1;
+      buckets.set(key, bucket);
+    }
+    return Array.from(buckets.entries()).map(([key, v]) => ({ key, total: v.total, delayed: v.delayed, delayedPct: v.total > 0 ? v.delayed / v.total * 100 : 0 })).sort((a, b) => b.total - a.total);
+  }
+  function average(values) {
+    if (values.length === 0) return null;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+  }
+  function computeInsights(records, topN = 10) {
+    const totalOrders = records.length;
+    const delayedRecords = records.filter(isDelayed);
+    const delayedCount = delayedRecords.length;
+    const planToCut = records.map(planToCutDays).filter((v) => v !== null);
+    const cutToActionCut = records.map(cutToActionCutDays).filter((v) => v !== null);
+    const mostOverdue = delayedRecords.map((record) => ({ record, daysOverdue: daysOverdue(record) })).sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, topN);
+    return {
+      totalOrders,
+      delayedCount,
+      delayedPct: totalOrders > 0 ? delayedCount / totalOrders * 100 : 0,
+      avgPlanToCutDays: average(planToCut),
+      avgCutToActionCutDays: average(cutToActionCut),
+      byKeyArea: breakdownBy(records, (r) => r.keyArea),
+      bySupervisor: breakdownBy(records, (r) => r.supervisor),
+      byTrade: breakdownBy(records, (r) => r.trade),
+      mostOverdue
+    };
+  }
+
+  // src/components/InsightsPanel.tsx
+  function KpiCard({ title, value, detail, tone = "default" }) {
+    return /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: `rounded-lg border p-4 shadow-sm ${tone === "warn" ? "border-mck-red/30 bg-white border-l-4 border-l-mck-red" : "border-mck-gray-200 bg-white"}`,
+        children: [
+          /* @__PURE__ */ jsx("div", { className: "text-xs font-medium uppercase tracking-wide text-mck-gray-600", children: title }),
+          /* @__PURE__ */ jsx("div", { className: "mt-1 text-3xl font-semibold text-mck-navy", children: value }),
+          /* @__PURE__ */ jsx("div", { className: "mt-1 text-xs text-mck-gray-600", children: detail })
+        ]
+      }
+    );
+  }
+  function ChartCard2({ title, children }) {
+    return /* @__PURE__ */ jsxs("div", { className: "rounded-lg border border-mck-gray-200 bg-white p-4 shadow-sm", children: [
+      /* @__PURE__ */ jsx("h3", { className: "mb-2 text-sm font-semibold text-mck-navy", children: title }),
+      /* @__PURE__ */ jsx("div", { className: "h-72", children })
+    ] });
+  }
+  function formatDate(iso) {
+    if (!iso) return "\u2014";
+    const d = /* @__PURE__ */ new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" });
+  }
+  function InsightsPanel({ records, week }) {
+    const weekRecords = useMemo(() => week ? records.filter((r) => r.week === week) : records, [records, week]);
+    const insights = useMemo(() => computeInsights(weekRecords, 10), [weekRecords]);
+    if (weekRecords.length === 0) {
+      return /* @__PURE__ */ jsx("div", { className: "rounded-lg border border-dashed border-mck-gray-200 bg-white p-6 text-center text-sm text-mck-gray-400", children: "No records match the current filters." });
+    }
+    const keyAreaChartData = insights.byKeyArea.map((row) => ({
+      name: row.key,
+      onTrack: row.total - row.delayed,
+      delayed: row.delayed
+    }));
+    const supervisorChartData = insights.bySupervisor.slice(0, 10).map((row) => ({
+      name: row.key,
+      onTrack: row.total - row.delayed,
+      delayed: row.delayed
+    }));
+    return /* @__PURE__ */ jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsxs("div", { className: "mb-2 flex items-baseline justify-between", children: [
+          /* @__PURE__ */ jsx("h2", { className: "text-sm font-semibold text-mck-navy", children: "Deeper Insights" }),
+          /* @__PURE__ */ jsx("span", { className: "text-xs text-mck-gray-400", children: week ? `Week of ${formatDate(week)}` : "All weeks" })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 sm:grid-cols-4", children: [
+          /* @__PURE__ */ jsx(KpiCard, { title: "Total Work Orders", value: insights.totalOrders.toLocaleString(), detail: "in the current filter" }),
+          /* @__PURE__ */ jsx(
+            KpiCard,
+            {
+              title: "Delayed Work Orders",
+              value: insights.delayedCount.toLocaleString(),
+              detail: `${insights.delayedPct.toFixed(0)}% of total \u2014 past due, not yet closed`,
+              tone: insights.delayedCount > 0 ? "warn" : "default"
+            }
+          ),
+          /* @__PURE__ */ jsx(
+            KpiCard,
+            {
+              title: "Avg. Plan \u2192 Cut",
+              value: insights.avgPlanToCutDays !== null ? `${insights.avgPlanToCutDays.toFixed(0)}d` : "\u2014",
+              detail: "days from mfg plan to mfg cut"
+            }
+          ),
+          /* @__PURE__ */ jsx(
+            KpiCard,
+            {
+              title: "Avg. Cut \u2192 Action Cut",
+              value: insights.avgCutToActionCutDays !== null ? `${insights.avgCutToActionCutDays.toFixed(0)}d` : "\u2014",
+              detail: "days from mfg cut to action cut"
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-1 gap-4 lg:grid-cols-2", children: [
+        /* @__PURE__ */ jsx(ChartCard2, { title: "Work Orders by Key Area", children: /* @__PURE__ */ jsx(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxs(BarChart, { data: keyAreaChartData, layout: "vertical", margin: { top: 5, right: 16, left: 8, bottom: 0 }, children: [
+          /* @__PURE__ */ jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "#E8EDF2" }),
+          /* @__PURE__ */ jsx(XAxis, { type: "number", tick: { fontSize: 11 }, allowDecimals: false }),
+          /* @__PURE__ */ jsx(YAxis, { type: "category", dataKey: "name", tick: { fontSize: 11 }, width: 110 }),
+          /* @__PURE__ */ jsx(Tooltip, {}),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#00A9CE" }),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#E34850" })
+        ] }) }) }),
+        /* @__PURE__ */ jsx(ChartCard2, { title: "Work Orders by Supervisor (Foreman)", children: /* @__PURE__ */ jsx(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxs(BarChart, { data: supervisorChartData, layout: "vertical", margin: { top: 5, right: 16, left: 8, bottom: 0 }, children: [
+          /* @__PURE__ */ jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "#E8EDF2" }),
+          /* @__PURE__ */ jsx(XAxis, { type: "number", tick: { fontSize: 11 }, allowDecimals: false }),
+          /* @__PURE__ */ jsx(YAxis, { type: "category", dataKey: "name", tick: { fontSize: 11 }, width: 90 }),
+          /* @__PURE__ */ jsx(Tooltip, {}),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "onTrack", name: "On track", stackId: "a", fill: "#00A9CE" }),
+          /* @__PURE__ */ jsx(Bar, { dataKey: "delayed", name: "Delayed", stackId: "a", fill: "#E34850" })
+        ] }) }) })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "overflow-hidden rounded-lg border border-mck-gray-200 bg-white shadow-sm", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between border-b border-mck-gray-200 bg-mck-gray-50 px-4 py-3", children: [
+          /* @__PURE__ */ jsx("h3", { className: "text-sm font-semibold text-mck-navy", children: "Most Overdue Work Orders" }),
+          /* @__PURE__ */ jsxs("span", { className: "text-xs text-mck-gray-400", children: [
+            "Top ",
+            insights.mostOverdue.length
+          ] })
+        ] }),
+        insights.mostOverdue.length === 0 ? /* @__PURE__ */ jsx("div", { className: "p-6 text-center text-sm text-mck-gray-400", children: "Nothing overdue in this selection." }) : /* @__PURE__ */ jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxs("table", { className: "w-full text-sm", children: [
+          /* @__PURE__ */ jsx("thead", { className: "bg-mck-gray-50 text-xs uppercase tracking-wide text-mck-gray-600", children: /* @__PURE__ */ jsxs("tr", { children: [
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Work Order" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Boat" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Trade" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Supervisor" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Key Area" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Due Date" }),
+            /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Days Overdue" })
+          ] }) }),
+          /* @__PURE__ */ jsx("tbody", { children: insights.mostOverdue.map(({ record, daysOverdue: overdue }) => /* @__PURE__ */ jsxs("tr", { className: "border-t border-mck-gray-100 hover:bg-mck-gray-50", children: [
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-800", children: record.workPackage || "\u2014" }),
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-600", children: record.hull }),
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-600", children: record.trade }),
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-600", children: record.supervisor }),
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-600", children: record.keyArea || "\u2014" }),
+            /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: formatDate(record.actionDue || record.mfgDueDate) }),
+            /* @__PURE__ */ jsxs("td", { className: "px-3 py-2 text-right font-semibold text-mck-red", children: [
+              overdue,
+              "d"
+            ] })
+          ] }, record.id)) })
+        ] }) })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-1 gap-4 lg:grid-cols-2", children: [
+        /* @__PURE__ */ jsxs("div", { className: "overflow-hidden rounded-lg border border-mck-gray-200 bg-white shadow-sm", children: [
+          /* @__PURE__ */ jsx("div", { className: "border-b border-mck-gray-200 bg-mck-gray-50 px-4 py-3", children: /* @__PURE__ */ jsx("h3", { className: "text-sm font-semibold text-mck-navy", children: "By Trade" }) }),
+          /* @__PURE__ */ jsxs("table", { className: "w-full text-sm", children: [
+            /* @__PURE__ */ jsx("thead", { className: "bg-mck-gray-50 text-xs uppercase tracking-wide text-mck-gray-600", children: /* @__PURE__ */ jsxs("tr", { children: [
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Trade" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Orders" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Delayed" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Delayed %" })
+            ] }) }),
+            /* @__PURE__ */ jsx("tbody", { children: insights.byTrade.map((row) => /* @__PURE__ */ jsxs("tr", { className: "border-t border-mck-gray-100", children: [
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-800", children: row.key }),
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: row.total }),
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: row.delayed }),
+              /* @__PURE__ */ jsxs("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: [
+                row.delayedPct.toFixed(0),
+                "%"
+              ] })
+            ] }, row.key)) })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "overflow-hidden rounded-lg border border-mck-gray-200 bg-white shadow-sm", children: [
+          /* @__PURE__ */ jsx("div", { className: "border-b border-mck-gray-200 bg-mck-gray-50 px-4 py-3", children: /* @__PURE__ */ jsx("h3", { className: "text-sm font-semibold text-mck-navy", children: "By Key Area" }) }),
+          /* @__PURE__ */ jsxs("table", { className: "w-full text-sm", children: [
+            /* @__PURE__ */ jsx("thead", { className: "bg-mck-gray-50 text-xs uppercase tracking-wide text-mck-gray-600", children: /* @__PURE__ */ jsxs("tr", { children: [
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-left", children: "Key Area" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Orders" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Delayed" }),
+              /* @__PURE__ */ jsx("th", { className: "px-3 py-2 text-right", children: "Delayed %" })
+            ] }) }),
+            /* @__PURE__ */ jsx("tbody", { children: insights.byKeyArea.map((row) => /* @__PURE__ */ jsxs("tr", { className: "border-t border-mck-gray-100", children: [
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-mck-gray-800", children: row.key }),
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: row.total }),
+              /* @__PURE__ */ jsx("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: row.delayed }),
+              /* @__PURE__ */ jsxs("td", { className: "px-3 py-2 text-right text-mck-gray-600", children: [
+                row.delayedPct.toFixed(0),
+                "%"
+              ] })
+            ] }, row.key)) })
+          ] })
+        ] })
+      ] })
+    ] });
+  }
+
   // shims/papaparse-shim.js
   var P = window.Papa;
   var papaparse_shim_default = P;
@@ -693,6 +930,10 @@
       };
       const shiftRaw = get("shift");
       const shift = shiftRaw.toLowerCase().startsWith("n") ? "Night" : "Day";
+      const getOpt = (name) => {
+        const v = get(name);
+        return v === "" ? void 0 : v;
+      };
       return {
         id: `csv-${index}-${get("week")}-${get("hull")}-${get("trade")}-${get("crew")}`,
         week: get("week"),
@@ -711,7 +952,23 @@
         actualHours: num(get("actualHours")),
         inspectionsPerformed: num(get("inspectionsPerformed")),
         inspectionsRejected: num(get("inspectionsRejected")),
-        safetyIncidents: num(get("safetyIncidents"))
+        safetyIncidents: num(get("safetyIncidents")),
+        orderNumber: getOpt("orderNumber") ?? getOpt("order number"),
+        activityNumber: getOpt("activityNumber") ?? getOpt("activity number"),
+        partNumber: getOpt("partNumber") ?? getOpt("part number"),
+        groupCode: getOpt("groupCode") ?? getOpt("group code"),
+        plnrInitials: getOpt("plnrInitials") ?? getOpt("plnr initials"),
+        keyEvent: getOpt("keyEvent") ?? getOpt("key event"),
+        keyArea: getOpt("keyArea") ?? getOpt("key area"),
+        mfgPlan: getOpt("mfgPlan") ?? getOpt("mfg plan"),
+        mfgCut: getOpt("mfgCut") ?? getOpt("mfg cut"),
+        mfgStatus: getOpt("mfgStatus") ?? getOpt("mfg status"),
+        mfgDueDate: getOpt("mfgDueDate") ?? getOpt("mfg due date"),
+        actionCut: getOpt("actionCut") ?? getOpt("action cut"),
+        actionStatus: getOpt("actionStatus") ?? getOpt("action status"),
+        actionDue: getOpt("actionDue") ?? getOpt("action due"),
+        estimatedCompletionDate: getOpt("estimatedCompletionDate") ?? getOpt("estimated completion date"),
+        mfgCode: getOpt("mfgCode") ?? getOpt("mfg code")
       };
     });
     return { records, errors };
@@ -734,11 +991,27 @@
       "actualHours",
       "inspectionsPerformed",
       "inspectionsRejected",
-      "safetyIncidents"
+      "safetyIncidents",
+      "orderNumber",
+      "activityNumber",
+      "partNumber",
+      "groupCode",
+      "plnrInitials",
+      "keyEvent",
+      "keyArea",
+      "mfgPlan",
+      "mfgCut",
+      "mfgStatus",
+      "mfgDueDate",
+      "actionCut",
+      "actionStatus",
+      "actionDue",
+      "estimatedCompletionDate",
+      "mfgCode"
     ];
     const example = [
       "2026-08-03",
-      "827",
+      "Boat 1",
       "3",
       "Pipe",
       "M. Alvarez",
@@ -753,7 +1026,23 @@
       "310",
       "5",
       "1",
-      "0"
+      "0",
+      "100234",
+      "010",
+      "P-88213",
+      "G12",
+      "JS",
+      "K-EVT-1",
+      "Engine Room",
+      "2026-05-01",
+      "2026-05-05",
+      "In Work",
+      "2026-08-15",
+      "2026-05-10",
+      "Open",
+      "2026-08-20",
+      "2026-08-18",
+      "MC-04"
     ];
     return `${header.join(",")}
 ${example.join(",")}
@@ -964,7 +1253,7 @@ ${example.join(",")}
     "Sheetmetal",
     "OSM"
   ];
-  var BOATS = ["827", "828", "829", "830"];
+  var BOATS = ["Boat 1", "Boat 2", "Boat 3", "Boat 4", "Boat 5"];
   var MODULES = ["1", "2", "3", "4", "5", "6"];
   var SUPERVISORS_BY_TRADE = {
     Pipe: ["M. Alvarez", "J. Cho"],
@@ -982,6 +1271,12 @@ ${example.join(",")}
     Sheetmetal: ["WP-M4-SHT-01"],
     OSM: ["WP-M4-OSM-01"]
   };
+  var KEY_AREAS = ["Engine Room", "Deckhouse", "Bridge", "Aft Peak", "Forward Compartment", "Main Deck"];
+  function addDays(iso, days) {
+    const d = /* @__PURE__ */ new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + Math.round(days));
+    return d.toISOString().slice(0, 10);
+  }
   function isoMonday(date) {
     const d = new Date(date);
     const day = d.getDay();
@@ -1035,6 +1330,18 @@ ${example.join(",")}
                 () => rand() < rejectionChance
               ).length;
               const safetyIncidents = rand() < 0.04 ? 1 : 0;
+              const delayFactor = 2 - base.skill;
+              const planLeadDays = 20 + rand() * 70;
+              const mfgPlan = addDays(week, -planLeadDays);
+              const cutLagDays = (5 + rand() * 15) * delayFactor;
+              const mfgCut = addDays(mfgPlan, cutLagDays);
+              const actionCutLagDays = (1 + rand() * 9) * delayFactor;
+              const actionCut = addDays(mfgCut, actionCutLagDays);
+              const mfgDueDate = addDays(mfgPlan, 45 + rand() * 75);
+              const actionDue = addDays(mfgDueDate, rand() * 10);
+              const remainingPct = Math.max(0, 100 - actualPercentComplete);
+              const estimatedCompletionDate = addDays(week, remainingPct * (2 + delayFactor));
+              const isComplete = actualPercentComplete >= 100;
               records.push({
                 id: `${key}__${week}`,
                 week,
@@ -1053,7 +1360,23 @@ ${example.join(",")}
                 actualHours: Math.round(actualHours),
                 inspectionsPerformed,
                 inspectionsRejected,
-                safetyIncidents
+                safetyIncidents,
+                orderNumber: `${1e5 + Math.floor(rand() * 89999)}`,
+                activityNumber: `${Math.floor(rand() * 9 + 1) * 10}`.padStart(3, "0"),
+                partNumber: `P-${8e4 + Math.floor(rand() * 19999)}`,
+                groupCode: `G${(1 + Math.floor(rand() * 20)).toString().padStart(2, "0")}`,
+                plnrInitials: ["JS", "RW", "SO", "KM", "PN", "AD"][Math.floor(rand() * 6)],
+                keyEvent: `K-EVT-${1 + Math.floor(rand() * 3)}`,
+                keyArea: KEY_AREAS[Math.floor(rand() * KEY_AREAS.length)],
+                mfgPlan,
+                mfgCut,
+                mfgStatus: isComplete ? "Complete" : "In Work",
+                mfgDueDate,
+                actionCut,
+                actionStatus: isComplete ? "Closed" : "Open",
+                actionDue,
+                estimatedCompletionDate,
+                mfgCode: `MC-${(1 + Math.floor(rand() * 6)).toString().padStart(2, "0")}`
               });
             });
           });
@@ -1264,6 +1587,7 @@ ${example.join(",")}
       () => loadFromStorage(RANK_EARNED_HOURS_WEIGHT_KEY, 0)
     );
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState("scorecard");
     useEffect(() => {
       localStorage.setItem(WEIGHTS_STORAGE_KEY, JSON.stringify(weights));
     }, [weights]);
@@ -1375,52 +1699,63 @@ ${example.join(",")}
             onOpenSettings: () => setSettingsOpen(true)
           }
         ),
-        /* @__PURE__ */ jsx(
-          ScorecardSummary,
+        /* @__PURE__ */ jsx("div", { className: "flex gap-1 border-b border-mck-gray-200", children: ["scorecard", "insights"].map((tab) => /* @__PURE__ */ jsx(
+          "button",
           {
-            summary,
-            weekLabel: latestWeek ? formatWeekLabel(latestWeek) : "",
-            title: scorecardTitle
-          }
-        ),
-        /* @__PURE__ */ jsx(TrendCharts, { data: trendData }),
-        moduleRankingGroups ? /* @__PURE__ */ jsxs("div", { className: "space-y-6", children: [
+            onClick: () => setActiveTab(tab),
+            className: `px-4 py-2 text-sm font-semibold transition-colors ${activeTab === tab ? "border-b-2 border-mck-teal text-mck-navy" : "border-b-2 border-transparent text-mck-gray-600 hover:text-mck-navy"}`,
+            children: tab === "scorecard" ? "Scorecard" : "Deeper Insights"
+          },
+          tab
+        )) }),
+        activeTab === "scorecard" ? /* @__PURE__ */ jsxs(Fragment2, { children: [
           /* @__PURE__ */ jsx(
-            RankingTable,
+            ScorecardSummary,
             {
-              groups: moduleRankingGroups.supervisor,
-              dimension: "supervisor",
-              rankEarnedHoursWeight,
-              week: latestWeek
+              summary,
+              weekLabel: latestWeek ? formatWeekLabel(latestWeek) : "",
+              title: scorecardTitle
             }
           ),
-          /* @__PURE__ */ jsx(
+          /* @__PURE__ */ jsx(TrendCharts, { data: trendData }),
+          moduleRankingGroups ? /* @__PURE__ */ jsxs("div", { className: "space-y-6", children: [
+            /* @__PURE__ */ jsx(
+              RankingTable,
+              {
+                groups: moduleRankingGroups.supervisor,
+                dimension: "supervisor",
+                rankEarnedHoursWeight,
+                week: latestWeek
+              }
+            ),
+            /* @__PURE__ */ jsx(
+              RankingTable,
+              {
+                groups: moduleRankingGroups.trade,
+                dimension: "trade",
+                rankEarnedHoursWeight,
+                week: latestWeek
+              }
+            ),
+            /* @__PURE__ */ jsx(
+              RankingTable,
+              {
+                groups: moduleRankingGroups.shift,
+                dimension: "shift",
+                rankEarnedHoursWeight,
+                week: latestWeek
+              }
+            )
+          ] }) : /* @__PURE__ */ jsx(
             RankingTable,
             {
-              groups: moduleRankingGroups.trade,
-              dimension: "trade",
-              rankEarnedHoursWeight,
-              week: latestWeek
-            }
-          ),
-          /* @__PURE__ */ jsx(
-            RankingTable,
-            {
-              groups: moduleRankingGroups.shift,
-              dimension: "shift",
+              groups: rankingGroups,
+              dimension: rankBy,
               rankEarnedHoursWeight,
               week: latestWeek
             }
           )
-        ] }) : /* @__PURE__ */ jsx(
-          RankingTable,
-          {
-            groups: rankingGroups,
-            dimension: rankBy,
-            rankEarnedHoursWeight,
-            week: latestWeek
-          }
-        )
+        ] }) : /* @__PURE__ */ jsx(InsightsPanel, { records: filteredRecords, week: latestWeek })
       ] }),
       /* @__PURE__ */ jsx(
         SettingsPanel,

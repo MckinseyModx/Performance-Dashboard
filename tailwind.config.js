@@ -3,6 +3,10 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Inter"', "ui-sans-serif", "system-ui", "-apple-system", "Helvetica Neue", "Arial", "sans-serif"],
+        serif: ['"Source Serif 4"', "Georgia", "Cambria", "serif"],
+      },
       colors: {
         mck: {
           navy: "#051C2C",
@@ -12,7 +16,7 @@ export default {
           red: "#E34850",
           green: "#00875A",
           gray: {
-            50: "#F5F6F8",
+            50: "#F4F3F1",
             100: "#E8EDF2",
             200: "#D1D9E0",
             400: "#B3B8C4",
