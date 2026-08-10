@@ -73,6 +73,11 @@ export function parseCsv(csvText: string): CsvParseResult {
     const shiftRaw = get("shift");
     const shift: "Day" | "Night" = shiftRaw.toLowerCase().startsWith("n") ? "Night" : "Day";
 
+    const getOpt = (name: string): string | undefined => {
+      const v = get(name);
+      return v === "" ? undefined : v;
+    };
+
     return {
       id: `csv-${index}-${get("week")}-${get("hull")}-${get("trade")}-${get("crew")}`,
       week: get("week"),
@@ -92,6 +97,22 @@ export function parseCsv(csvText: string): CsvParseResult {
       inspectionsPerformed: num(get("inspectionsPerformed")),
       inspectionsRejected: num(get("inspectionsRejected")),
       safetyIncidents: num(get("safetyIncidents")),
+      orderNumber: getOpt("orderNumber") ?? getOpt("order number"),
+      activityNumber: getOpt("activityNumber") ?? getOpt("activity number"),
+      partNumber: getOpt("partNumber") ?? getOpt("part number"),
+      groupCode: getOpt("groupCode") ?? getOpt("group code"),
+      plnrInitials: getOpt("plnrInitials") ?? getOpt("plnr initials"),
+      keyEvent: getOpt("keyEvent") ?? getOpt("key event"),
+      keyArea: getOpt("keyArea") ?? getOpt("key area"),
+      mfgPlan: getOpt("mfgPlan") ?? getOpt("mfg plan"),
+      mfgCut: getOpt("mfgCut") ?? getOpt("mfg cut"),
+      mfgStatus: getOpt("mfgStatus") ?? getOpt("mfg status"),
+      mfgDueDate: getOpt("mfgDueDate") ?? getOpt("mfg due date"),
+      actionCut: getOpt("actionCut") ?? getOpt("action cut"),
+      actionStatus: getOpt("actionStatus") ?? getOpt("action status"),
+      actionDue: getOpt("actionDue") ?? getOpt("action due"),
+      estimatedCompletionDate: getOpt("estimatedCompletionDate") ?? getOpt("estimated completion date"),
+      mfgCode: getOpt("mfgCode") ?? getOpt("mfg code"),
     };
   });
 
@@ -117,10 +138,26 @@ export function downloadSampleCsvTemplate(): string {
     "inspectionsPerformed",
     "inspectionsRejected",
     "safetyIncidents",
+    "orderNumber",
+    "activityNumber",
+    "partNumber",
+    "groupCode",
+    "plnrInitials",
+    "keyEvent",
+    "keyArea",
+    "mfgPlan",
+    "mfgCut",
+    "mfgStatus",
+    "mfgDueDate",
+    "actionCut",
+    "actionStatus",
+    "actionDue",
+    "estimatedCompletionDate",
+    "mfgCode",
   ];
   const example = [
     "2026-08-03",
-    "827",
+    "Boat 1",
     "3",
     "Pipe",
     "M. Alvarez",
@@ -136,6 +173,22 @@ export function downloadSampleCsvTemplate(): string {
     "5",
     "1",
     "0",
+    "100234",
+    "010",
+    "P-88213",
+    "G12",
+    "JS",
+    "K-EVT-1",
+    "Engine Room",
+    "2026-05-01",
+    "2026-05-05",
+    "In Work",
+    "2026-08-15",
+    "2026-05-10",
+    "Open",
+    "2026-08-20",
+    "2026-08-18",
+    "MC-04",
   ];
   return `${header.join(",")}\n${example.join(",")}\n`;
 }

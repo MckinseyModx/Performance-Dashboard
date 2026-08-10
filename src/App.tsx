@@ -5,6 +5,7 @@ import ScorecardSummary from "./components/ScorecardSummary";
 import TrendCharts from "./components/TrendCharts";
 import type { WeeklyTrendPoint } from "./components/TrendCharts";
 import RankingTable from "./components/RankingTable";
+import InsightsPanel from "./components/InsightsPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import { generateMockData, DEFAULT_TRADES } from "./data/mockData";
 import { DEFAULT_WEIGHTS } from "./utils/scoring";
@@ -51,6 +52,7 @@ export default function App() {
     loadFromStorage(RANK_EARNED_HOURS_WEIGHT_KEY, 0)
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"scorecard" | "insights">("scorecard");
 
   useEffect(() => {
     localStorage.setItem(WEIGHTS_STORAGE_KEY, JSON.stringify(weights));
@@ -186,42 +188,64 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        <ScorecardSummary
-          summary={summary}
-          weekLabel={latestWeek ? formatWeekLabel(latestWeek) : ""}
-          title={scorecardTitle}
-        />
+        <div className="flex gap-1 border-b border-mck-gray-200">
+          {(["scorecard", "insights"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-semibold transition-colors ${
+                activeTab === tab
+                  ? "border-b-2 border-mck-teal text-mck-navy"
+                  : "border-b-2 border-transparent text-mck-gray-600 hover:text-mck-navy"
+              }`}
+            >
+              {tab === "scorecard" ? "Scorecard" : "Deeper Insights"}
+            </button>
+          ))}
+        </div>
 
-        <TrendCharts data={trendData} />
+        {activeTab === "scorecard" ? (
+          <>
+            <ScorecardSummary
+              summary={summary}
+              weekLabel={latestWeek ? formatWeekLabel(latestWeek) : ""}
+              title={scorecardTitle}
+            />
 
-        {moduleRankingGroups ? (
-          <div className="space-y-6">
-            <RankingTable
-              groups={moduleRankingGroups.supervisor}
-              dimension="supervisor"
-              rankEarnedHoursWeight={rankEarnedHoursWeight}
-              week={latestWeek}
-            />
-            <RankingTable
-              groups={moduleRankingGroups.trade}
-              dimension="trade"
-              rankEarnedHoursWeight={rankEarnedHoursWeight}
-              week={latestWeek}
-            />
-            <RankingTable
-              groups={moduleRankingGroups.shift}
-              dimension="shift"
-              rankEarnedHoursWeight={rankEarnedHoursWeight}
-              week={latestWeek}
-            />
-          </div>
+            <TrendCharts data={trendData} />
+
+            {moduleRankingGroups ? (
+              <div className="space-y-6">
+                <RankingTable
+                  groups={moduleRankingGroups.supervisor}
+                  dimension="supervisor"
+                  rankEarnedHoursWeight={rankEarnedHoursWeight}
+                  week={latestWeek}
+                />
+                <RankingTable
+                  groups={moduleRankingGroups.trade}
+                  dimension="trade"
+                  rankEarnedHoursWeight={rankEarnedHoursWeight}
+                  week={latestWeek}
+                />
+                <RankingTable
+                  groups={moduleRankingGroups.shift}
+                  dimension="shift"
+                  rankEarnedHoursWeight={rankEarnedHoursWeight}
+                  week={latestWeek}
+                />
+              </div>
+            ) : (
+              <RankingTable
+                groups={rankingGroups}
+                dimension={rankBy}
+                rankEarnedHoursWeight={rankEarnedHoursWeight}
+                week={latestWeek}
+              />
+            )}
+          </>
         ) : (
-          <RankingTable
-            groups={rankingGroups}
-            dimension={rankBy}
-            rankEarnedHoursWeight={rankEarnedHoursWeight}
-            week={latestWeek}
-          />
+          <InsightsPanel records={filteredRecords} week={latestWeek} />
         )}
       </main>
 

@@ -4,7 +4,7 @@
 export interface WeeklyRecord {
   id: string;
   week: string; // ISO date (Monday) of the work week, e.g. "2026-06-01"
-  hull: string; // boat number, e.g. "827" (stored as hull for CSV compatibility)
+  hull: string; // boat name, e.g. "Boat 1" (stored as hull for CSV compatibility)
   module: string; // module number, e.g. "1", "2", ... "6"
   trade: string; // e.g. "Pipe", "Structural", "Electrical", ...
   supervisor: string;
@@ -28,6 +28,26 @@ export interface WeeklyRecord {
 
   // Safety
   safetyIncidents: number; // recordable incidents / near-misses this week
+
+  // Order-level detail (optional -- present for real CSV imports and mock data,
+  // used by the Insights tab; a hand-entered row without these just won't show
+  // up in the Insights breakdowns).
+  orderNumber?: string;
+  activityNumber?: string;
+  partNumber?: string;
+  groupCode?: string;
+  plnrInitials?: string;
+  keyEvent?: string;
+  keyArea?: string;
+  mfgPlan?: string; // ISO date
+  mfgCut?: string; // ISO date
+  mfgStatus?: string;
+  mfgDueDate?: string; // ISO date
+  actionCut?: string; // ISO date
+  actionStatus?: string;
+  actionDue?: string; // ISO date
+  estimatedCompletionDate?: string; // ISO date
+  mfgCode?: string;
 }
 
 export type RankByDimension = "supervisor" | "crew" | "trade" | "shift" | "hull" | "module";

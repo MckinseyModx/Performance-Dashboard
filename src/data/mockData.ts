@@ -21,7 +21,7 @@ export const DEFAULT_TRADES = [
   "OSM",
 ];
 
-const BOATS = [" Boat 1", " Boat 2", " Boat 3", " Boat 4"];
+const BOATS = ["Boat 1", "Boat 2", "Boat 3", "Boat 4", "Boat 5"];
 const MODULES = ["1", "2", "3", "4", "5", "6"];
 
 const SUPERVISORS_BY_TRADE: Record<string, string[]> = {
@@ -41,6 +41,14 @@ const WORK_PACKAGES_BY_TRADE: Record<string, string[]> = {
   Sheetmetal: ["WP-M4-SHT-01"],
   OSM: ["WP-M4-OSM-01"],
 };
+
+const KEY_AREAS = ["Engine Room", "Deckhouse", "Bridge", "Aft Peak", "Forward Compartment", "Main Deck"];
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + Math.round(days));
+  return d.toISOString().slice(0, 10);
+}
 
 function isoMonday(date: Date): string {
   const d = new Date(date);
@@ -113,6 +121,23 @@ export function generateMockData(weekCount = 12, trades: string[] = DEFAULT_TRAD
 
             const safetyIncidents = rand() < 0.04 ? 1 : 0;
 
+            // Order-level detail (approximate for sample data -- each row here
+            // represents one crew/week, whereas real CSV imports are one row
+            // per actual work order, so Insights will be far more granular
+            // once real data is loaded).
+            const delayFactor = 2 - base.skill; // lower skill -> more slippage
+            const planLeadDays = 20 + rand() * 70;
+            const mfgPlan = addDays(week, -planLeadDays);
+            const cutLagDays = (5 + rand() * 15) * delayFactor;
+            const mfgCut = addDays(mfgPlan, cutLagDays);
+            const actionCutLagDays = (1 + rand() * 9) * delayFactor;
+            const actionCut = addDays(mfgCut, actionCutLagDays);
+            const mfgDueDate = addDays(mfgPlan, 45 + rand() * 75);
+            const actionDue = addDays(mfgDueDate, rand() * 10);
+            const remainingPct = Math.max(0, 100 - actualPercentComplete);
+            const estimatedCompletionDate = addDays(week, remainingPct * (2 + delayFactor));
+            const isComplete = actualPercentComplete >= 100;
+
             records.push({
               id: `${key}__${week}`,
               week,
@@ -132,6 +157,22 @@ export function generateMockData(weekCount = 12, trades: string[] = DEFAULT_TRAD
               inspectionsPerformed,
               inspectionsRejected,
               safetyIncidents,
+              orderNumber: `${100000 + Math.floor(rand() * 89999)}`,
+              activityNumber: `${Math.floor(rand() * 9 + 1) * 10}`.padStart(3, "0"),
+              partNumber: `P-${80000 + Math.floor(rand() * 19999)}`,
+              groupCode: `G${(1 + Math.floor(rand() * 20)).toString().padStart(2, "0")}`,
+              plnrInitials: ["JS", "RW", "SO", "KM", "PN", "AD"][Math.floor(rand() * 6)],
+              keyEvent: `K-EVT-${1 + Math.floor(rand() * 3)}`,
+              keyArea: KEY_AREAS[Math.floor(rand() * KEY_AREAS.length)],
+              mfgPlan,
+              mfgCut,
+              mfgStatus: isComplete ? "Complete" : "In Work",
+              mfgDueDate,
+              actionCut,
+              actionStatus: isComplete ? "Closed" : "Open",
+              actionDue,
+              estimatedCompletionDate,
+              mfgCode: `MC-${(1 + Math.floor(rand() * 6)).toString().padStart(2, "0")}`,
             });
           });
         });
